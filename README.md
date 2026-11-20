@@ -54,10 +54,21 @@ lib/
 ```bash
 curl -X POST http://localhost:3000/api/simular \
   -H "Content-Type: application/json" \
-  -d '{"tipo":"credito","monto":20000000,"meses":36,"tasaAnual":24}'
+  -d '{"tipo":"credito","monto":20000000,"meses":36,"tasa":24,"tipoTasa":"EA"}'
 ```
 
-También acepta `{"tipo":"ahorro","inicial":1000000,"aporte":300000,"meses":60,"tasaAnual":9}`.
+También acepta `{"tipo":"ahorro","inicial":1000000,"aporte":300000,"meses":60,"tasa":0.72,"tipoTasa":"MV"}`.
+
+`tipoTasa` indica cómo viene la tasa:
+
+| Valor  | Significa                              | Ejemplo equivalente |
+|--------|----------------------------------------|---------------------|
+| `EA`   | Efectiva anual (por defecto)           | 24 %                |
+| `NAMV` | Nominal anual mes vencido (N.M.V.)     | 21,71 %             |
+| `MV`   | Efectiva mensual, mes vencido          | 1,81 %              |
+
+Todas se convierten a tasa efectiva mensual antes de calcular. `tasaAnual` se sigue
+aceptando como alias de `tasa` con tipo `EA`.
 
 ## Qué cambiar primero
 

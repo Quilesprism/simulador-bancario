@@ -118,6 +118,8 @@ input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 
 .tasa-caja:focus-within { border-color: var(--oceano); }
 .tasa-caja input { width: 64px; border: 0; outline: 0; font-weight: 600; font-size: 18px; text-align: right; background: transparent; font-variant-numeric: tabular-nums; }
 .tasa-caja span { font-weight: 600; margin-left: 4px; color: var(--suave); }
+.tasa-caja select { font: inherit; font-weight: 600; margin-left: 4px; color: var(--suave); border: 0; outline: 0; background: transparent; cursor: pointer; }
+.tasa-equivale { display: block; margin-top: 4px; font-size: 13.5px; }
 .tasa-fila p { font-size: 14.5px; color: var(--suave); flex: 1; min-width: 200px; }
 
 /* Panel de resultado */

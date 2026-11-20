@@ -1,7 +1,9 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { calcularAhorro, calcularCredito, miles, pesos, textoPlazo } from '@/lib/finanzas';
+import {
+  calcularAhorro, calcularCredito, convertirTasa, miles, pesos, textoPlazo, TIPOS_TASA, type TipoTasa,
+} from '@/lib/finanzas';
 import Grafica from './Grafica';
 import Tabla from './Tabla';
 
@@ -13,10 +15,18 @@ const TIPOS = [
   { id: 'vivienda', titulo: 'Casa o apartamento', detalle: 'Vivienda', tasa: 12, plazoMax: 240 },
 ];
 
-const leerTasa = (s: string) => {
-  const v = parseFloat(s.replace(',', '.'));
-  return Number.isFinite(v) && v >= 0 ? Math.min(v, 100) : 0;
+const MODALIDAD: Record<TipoTasa, { caja: string; corta: string; nombre: string }> = {
+  EA: { caja: '% al año (E.A.)', corta: '% E.A.', nombre: 'efectiva anual' },
+  NAMV: { caja: '% al año (N.M.V.)', corta: '% N.M.V.', nombre: 'nominal mes vencido' },
+  MV: { caja: '% al mes (M.V.)', corta: '% mensual', nombre: 'mensual' },
 };
+
+/** Lee lo que escribió la persona; no deja pasar más del equivalente a 100 % E.A. */
+const leerTasa = (s: string, tipo: TipoTasa) => {
+  const v = parseFloat(s.replace(',', '.'));
+  return Number.isFinite(v) && v >= 0 ? Math.min(v, convertirTasa(100, 'EA', tipo)) : 0;
+};
+const textoTasa = (n: number) => String(Number(n.toFixed(2))).replace('.', ',');
 const relleno = (valor: number, min: number, max: number) =>
   ({ ['--p' as string]: `${Math.min(100, Math.max(0, ((valor - min) / (max - min)) * 100))}%` });
 
@@ -28,32 +38,37 @@ export default function Simulador() {
   const [plazo, setPlazo] = useState(36);
   const [tipo, setTipo] = useState('libre');
   const [tasa, setTasa] = useState('24');
+  const [tipoTasa, setTipoTasa] = useState<TipoTasa>('EA');
 
   // Ahorro
   const [inicial, setInicial] = useState(1_000_000);
   const [aporte, setAporte] = useState(300_000);
   const [plazoAhorro, setPlazoAhorro] = useState(60);
   const [tasaAhorro, setTasaAhorro] = useState('9');
+  const [tipoTasaAhorro, setTipoTasaAhorro] = useState<TipoTasa>('EA');
 
   const plazoMax = TIPOS.find((t) => t.id === tipo)?.plazoMax ?? 84;
-  const tasaNum = leerTasa(tasa);
-  const tasaAhorroNum = leerTasa(tasaAhorro);
+  const tasaNum = leerTasa(tasa, tipoTasa);
+  const tasaAhorroNum = leerTasa(tasaAhorro, tipoTasaAhorro);
+  const tasaEA = convertirTasa(tasaNum, tipoTasa, 'EA');
 
-  const credito = useMemo(() => calcularCredito(Math.max(monto, 1), plazo, tasaNum), [monto, plazo, tasaNum]);
+  const credito = useMemo(
+    () => calcularCredito(Math.max(monto, 1), plazo, tasaNum, tipoTasa),
+    [monto, plazo, tasaNum, tipoTasa],
+  );
   const ahorro = useMemo(
-    () => calcularAhorro(inicial, aporte, plazoAhorro, tasaAhorroNum),
-    [inicial, aporte, plazoAhorro, tasaAhorroNum],
+    () => calcularAhorro(inicial, aporte, plazoAhorro, tasaAhorroNum, tipoTasaAhorro),
+    [inicial, aporte, plazoAhorro, tasaAhorroNum, tipoTasaAhorro],
   );
 
   function elegirTipo(id: string) {
     const t = TIPOS.find((x) => x.id === id)!;
     setTipo(id);
-    setTasa(String(t.tasa));
+    setTasa(textoTasa(convertirTasa(t.tasa, 'EA', tipoTasa)));
     if (plazo > t.plazoMax) setPlazo(t.plazoMax);
   }
 
   const esCredito = modo === 'credito';
-  const coma = (n: number) => String(n).replace('.', ',');
   const plazoTxt = textoPlazo(plazo);
   const plazoAhorroTxt = textoPlazo(plazoAhorro);
   const baseAhorro = Math.max(ahorro.final, 1);
@@ -106,22 +121,17 @@ export default function Simulador() {
                       {TIPOS.map((t) => (
                         <button
                           key={t.id} type="button" onClick={() => elegirTipo(t.id)}
-                          aria-pressed={t.id === tipo && t.tasa === tasaNum}
+                          aria-pressed={t.id === tipo && Math.abs(t.tasa - tasaEA) < 0.01}
                         >
                           <strong>{t.titulo}</strong><em>{t.detalle}</em>
                         </button>
                       ))}
                     </div>
-                    <div className="tasa-fila">
-                      <label className="tasa-caja" aria-label="Interés al año, en porcentaje">
-                        <input inputMode="decimal" value={tasa} onChange={(e) => setTasa(e.target.value)} />
-                        <span>% al año</span>
-                      </label>
-                      <p>
-                        Es un interés de ejemplo. Si tu banco ya te dio uno, escríbelo aquí: es el número que aparece
-                        junto a “E.A.”.
-                      </p>
-                    </div>
+                    <CampoTasa
+                      id="c-tasa" valor={tasa} tipo={tipoTasa} numero={tasaNum}
+                      onValor={setTasa} onTipo={setTipoTasa}
+                      ayuda="Es un interés de ejemplo. Si tu banco ya te dio uno, escríbelo aquí y elige cómo te lo dieron: E.A., N.M.V. o mensual."
+                    />
                   </div>
                 </form>
               ) : (
@@ -144,13 +154,11 @@ export default function Simulador() {
                       style={relleno(plazoAhorro, 6, 240)} onChange={(e) => setPlazoAhorro(Number(e.target.value))}
                     />
                     <div className="extremos"><span>6 meses</span><span>20 años</span></div>
-                    <div className="tasa-fila">
-                      <label className="tasa-caja" aria-label="Interés al año, en porcentaje">
-                        <input inputMode="decimal" value={tasaAhorro} onChange={(e) => setTasaAhorro(e.target.value)} />
-                        <span>% al año</span>
-                      </label>
-                      <p>Es lo que el banco te paga por guardar tu dinero. Cámbialo por el que ofrezca tu cuenta o CDT.</p>
-                    </div>
+                    <CampoTasa
+                      id="a-tasa" valor={tasaAhorro} tipo={tipoTasaAhorro} numero={tasaAhorroNum}
+                      onValor={setTasaAhorro} onTipo={setTipoTasaAhorro}
+                      ayuda="Es lo que el banco te paga por guardar tu dinero. Cámbialo por el que ofrezca tu cuenta o CDT."
+                    />
                   </div>
                 </form>
               )}
@@ -160,8 +168,8 @@ export default function Simulador() {
                 <p className="cifra">{pesos(esCredito ? credito.cuota : ahorro.final)}</p>
                 <p className="nota">
                   {esCredito
-                    ? `Durante ${plazo} meses, con un interés del ${coma(tasaNum)} % al año.`
-                    : `En ${plazoAhorroTxt || plazoAhorro + ' meses'}, con un interés del ${coma(tasaAhorroNum)} % al año.`}
+                    ? `Durante ${plazo} meses, con un interés del ${textoTasa(tasaNum)} ${MODALIDAD[tipoTasa].corta}.`
+                    : `En ${plazoAhorroTxt || plazoAhorro + ' meses'}, con un interés del ${textoTasa(tasaAhorroNum)} ${MODALIDAD[tipoTasaAhorro].corta}.`}
                 </p>
                 <div className="reparto">
                   <div className="barra" aria-hidden="true">
@@ -281,6 +289,40 @@ function CampoDinero(props: {
         style={relleno(enRango, min, max)} onChange={(e) => onChange(Number(e.target.value))}
       />
       <div className="extremos"><span>{desde}</span><span>{hasta}</span></div>
+    </div>
+  );
+}
+
+function CampoTasa(props: {
+  id: string; valor: string; tipo: TipoTasa; numero: number; ayuda: string;
+  onValor: (s: string) => void; onTipo: (t: TipoTasa) => void;
+}) {
+  const { id, valor, tipo, numero, ayuda, onValor, onTipo } = props;
+  const otras = TIPOS_TASA.filter((t) => t !== tipo);
+
+  // Al cambiar la modalidad se convierte el número, así la cuota no cambia por accidente.
+  function cambiarTipo(nuevo: TipoTasa) {
+    onValor(textoTasa(convertirTasa(numero, tipo, nuevo)));
+    onTipo(nuevo);
+  }
+
+  return (
+    <div className="tasa-fila">
+      <div className="tasa-caja">
+        <input
+          id={id} inputMode="decimal" value={valor} onChange={(e) => onValor(e.target.value)}
+          aria-label={`Interés ${MODALIDAD[tipo].nombre}, en porcentaje`}
+        />
+        <select value={tipo} onChange={(e) => cambiarTipo(e.target.value as TipoTasa)} aria-label="Cómo te dieron el interés">
+          {TIPOS_TASA.map((t) => <option key={t} value={t}>{MODALIDAD[t].caja}</option>)}
+        </select>
+      </div>
+      <p>
+        {ayuda}
+        <span className="tasa-equivale">
+          Equivale a {otras.map((t) => `${textoTasa(convertirTasa(numero, tipo, t))} ${MODALIDAD[t].corta}`).join(' o ')}.
+        </span>
+      </p>
     </div>
   );
 }

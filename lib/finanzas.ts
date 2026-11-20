@@ -30,12 +30,47 @@ export interface ResultadoAhorro {
 }
 
 
-export function tasaMensual(tasaAnual: number): number {
-  return Math.pow(1 + tasaAnual / 100, 1 / 12) - 1;
+/**
+ * Modalidades de tasa que usan los bancos en Colombia:
+ *  - EA:   efectiva anual.
+ *  - NAMV: nominal anual, mes vencido (N.M.V.). Es 12 veces la tasa mensual.
+ *  - MV:   efectiva mensual, mes vencido.
+ */
+export type TipoTasa = 'EA' | 'NAMV' | 'MV';
+export const TIPOS_TASA: TipoTasa[] = ['EA', 'NAMV', 'MV'];
+
+/** Convierte una tasa (en %) de cualquier modalidad a tasa efectiva mensual (decimal). */
+export function tasaMensual(tasa: number, tipo: TipoTasa = 'EA'): number {
+  const t = tasa / 100;
+  switch (tipo) {
+    case 'EA':
+      return Math.pow(1 + t, 1 / 12) - 1;
+    case 'NAMV':
+      return t / 12;
+    case 'MV':
+      return t;
+  }
 }
 
-export function calcularCredito(monto: number, meses: number, tasaAnual: number): ResultadoCredito {
-  const i = tasaMensual(tasaAnual);
+/** Expresa una tasa efectiva mensual (decimal) en la modalidad pedida (en %). */
+export function desdeMensual(i: number, tipo: TipoTasa): number {
+  switch (tipo) {
+    case 'EA':
+      return (Math.pow(1 + i, 12) - 1) * 100;
+    case 'NAMV':
+      return i * 12 * 100;
+    case 'MV':
+      return i * 100;
+  }
+}
+
+/** Convierte una tasa (en %) de una modalidad a otra. */
+export function convertirTasa(tasa: number, de: TipoTasa, a: TipoTasa): number {
+  return de === a ? tasa : desdeMensual(tasaMensual(tasa, de), a);
+}
+
+export function calcularCredito(monto: number, meses: number, tasa: number, tipo: TipoTasa = 'EA'): ResultadoCredito {
+  const i = tasaMensual(tasa, tipo);
   const cuota = i === 0 ? monto / meses : (monto * i) / (1 - Math.pow(1 + i, -meses));
   const filas: FilaCredito[] = [];
   let saldo = monto;
@@ -52,8 +87,10 @@ export function calcularCredito(monto: number, meses: number, tasaAnual: number)
 }
 
 /** Ahorro con un valor inicial y un aporte al final de cada mes (interés compuesto). */
-export function calcularAhorro(inicial: number, aporte: number, meses: number, tasaAnual: number): ResultadoAhorro {
-  const i = tasaMensual(tasaAnual);
+export function calcularAhorro(
+  inicial: number, aporte: number, meses: number, tasa: number, tipo: TipoTasa = 'EA',
+): ResultadoAhorro {
+  const i = tasaMensual(tasa, tipo);
   const filas: FilaAhorro[] = [];
   let saldo = inicial;
   let ganado = 0;
